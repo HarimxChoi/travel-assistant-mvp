@@ -50,11 +50,14 @@ function App() {
 
     try {
       // --- 3. API Call ---
-      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:8008/chat';
-      console.log(`Requesting API at: ${apiUrl} with thread_id: ${threadId}`);
+      const baseUrl = process.env.REACT_APP_API_URL || 'http://localhost:8008';
+
+      const fullApiUrl = `${baseUrl}/chat`;
+
+      console.log(`Requesting API at: ${fullApiUrl} with thread_id: ${threadId}`);
 
       const response = await axios.post(
-        apiUrl, 
+        fullApiUrl, 
         {
           message: userMessage.text,
           thread_id: threadId 
