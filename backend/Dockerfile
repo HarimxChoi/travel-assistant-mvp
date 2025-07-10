@@ -9,7 +9,7 @@ FROM python:3.10-slim
 WORKDIR /app
 
 # 3. Copy the file that lists our dependencies into the container.
-COPY requirements.txt .
+COPY backend/requirements.txt .
 
 # 4. Install the dependencies.
 # --no-cache-dir makes the image smaller.
@@ -19,7 +19,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # 5. Copy the rest of our application's source code into the container.
 # The '.' means copy everything from the current host directory (where Dockerfile is)
 # to the current container directory ('/app').
-COPY . .
+COPY backend/ .
 
 # 6. Expose the port that our application will run on.
 # This tells Docker that the container will listen on port 8008.
