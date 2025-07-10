@@ -1,5 +1,3 @@
-# agent_graph.py (Final Correct Version using Official LangChain Integration)
-
 # --- 1. Import necessary libraries ---
 import os
 from dotenv import load_dotenv
@@ -70,7 +68,6 @@ def get_trip_information(destination: str, start_date: str, end_date: str) -> st
     (destination, start_date, end_date) are stored in the state.
     """
     if not tavily_client: return "Search tool is not available."
-    # ... (내부적으로 flight_price_search와 local_event_search 로직을 합침)
     price_query = f"typical round-trip flight prices to {destination} from {start_date}"
     event_query = f"events and festivals in {destination} between {start_date} and {end_date}"
     price_results = tavily_client.search(query=price_query, max_results=2)
