@@ -1,0 +1,106 @@
+/* --- Global & Font Settings --- */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  background-color: #f4f7f9;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  margin: 0;
+}
+
+/* --- Chat Widget Container --- */
+.chat-widget {
+  width: 380px;
+  height: 600px;
+  display: flex;
+  flex-direction: column;
+  background-color: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+/* --- Header --- */
+.widget-header {
+  background: linear-gradient(90deg, #4a90e2, #50e3c2);
+  color: white;
+  padding: 16px 20px;
+  text-align: center;
+  font-size: 1.1rem;
+  font-weight: 600;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  border-bottom: 1px solid transparent;
+}
+
+
+/* --- Messages Container --- */
+.messages-container {
+  flex-grow: 1;
+  padding: 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* --- Individual Message Bubbles --- */
+.message {
+  max-width: 80%;
+  padding: 10px 15px;
+  margin-bottom: 10px;
+  border-radius: 18px;
+  line-height: 1.5;
+  font-size: 0.95rem;
+  word-wrap: break-word;
+}
+
+.user {
+  align-self: flex-end;
+  background-color: #4a90e2;
+  color: white;
+  border-bottom-right-radius: 4px;
+}
+
+.bot {
+  align-self: flex-start;
+  background-color: #f0f2f5;
+  color: #333;
+  border-bottom-left-radius: 4px;
+}
+
+/* --- Input Area --- */
+.input-container {
+  display: flex;
+  padding: 15px;
+  border-top: 1px solid #e9ecef;
+  background-color: #fff;
+}
+
+.input-container input {
+  flex-grow: 1;
+  border: none;
+  padding: 10px;
+  font-size: 0.95rem;
+  background-color: transparent;
+}
+
+.input-container input:focus {
+  outline: none;
+}
+
+.input-container button {
+  background-color: #4a90e2;
+  color: white;
+  border: none;
+  padding: 10px 15px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background-color 0.2s;
+}
+
+.input-container button:hover {
+  background-color: #357abd;
+}
