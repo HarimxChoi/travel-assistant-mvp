@@ -13,7 +13,10 @@ from agent_graph import build_graph
 app = FastAPI(title="Ascend Travel AI Assistant API (Pure Sync)")
 
 # --- 3. Configure CORS ---
-origins = ["http://localhost:3000"]
+origins = [
+           "http://localhost:3000",
+           "https://uninterested-shrew-bowhouse-8870781b.koyeb.app"
+           ]
 app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
 # --- 4. Define Data Models (Pydantic V2) ---
