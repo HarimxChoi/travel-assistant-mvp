@@ -1,15 +1,13 @@
-# main.py (Pure Synchronous Final Version with Validation)
-
 # --- 1. Import Dependencies ---
 from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field, ValidationError # Keep ValidationError
+from pydantic import BaseModel, Field, ValidationError
 import uvicorn
 from langchain_core.messages import HumanMessage
 from langgraph.checkpoint.sqlite import SqliteSaver 
 
 # Import the graph builder *object* itself, not the compiled graph
-from backend.agent_graph import build_graph 
+from agent_graph import build_graph 
 
 # --- 2. Initialize FastAPI App ---
 app = FastAPI(title="Ascend Travel AI Assistant API (Pure Sync)")
@@ -28,7 +26,7 @@ class ChatResponse(BaseModel):
     structured_data: dict
     thread_id: str
 
-# --- 5. Global State: Compile Graph on Module Load (Simplest Way) ---
+# --- 5. Global State: Compile Graph on Module Load  ---
 agent_graph = build_graph()
 print("AI Agent Graph compiled with default InMemorySaver.")
 
@@ -39,9 +37,6 @@ def root():
 
 def validate_chat_request(request: ChatRequest):
     """Dependency to validate incoming chat requests."""
-    # This function now correctly handles validation before the main endpoint logic.
-    # Pydantic's built-in validation for min/max length already runs.
-    # We can add custom logic here.
     if not request.thread_id.startswith("session_"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

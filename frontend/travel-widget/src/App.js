@@ -1,5 +1,3 @@
-// App.js
-
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import './App.css';
@@ -62,19 +60,17 @@ function App() {
           thread_id: threadId 
         }, 
         {
-          timeout: 30000 // Set a 15-second timeout. If no response, it will throw an error.
+          timeout: 30000
         }
       );
       
       // --- 4. Success Logic ---
-      // This block runs ONLY if the request was successful (status 2xx).
       const botResponse = { 
         type: 'bot', 
         text: response.data.reply, // Get the reply from the backend
         isError: false 
       };
       
-      // Replace the loading indicator ('...') with the actual bot response.
       setMessages(prev => [...prev.slice(0, -1), botResponse]);
 
     } catch (error) {

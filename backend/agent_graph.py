@@ -164,7 +164,6 @@ def tool_node(state: TravelAgentState):
     # This check is crucial, as the router might decide no tool is needed.
     if not hasattr(last_message, 'tool_calls') or not last_message.tool_calls:
         # If no tools are called, we can optionally add a message to indicate this.
-        # For now, we just pass through.
         return {}
         
     tool_messages = []
@@ -182,7 +181,7 @@ def tool_node(state: TravelAgentState):
             # Its only purpose is to update our state.
             print(f"    - Updating internal state with: {args}")
             for key, value in args.items():
-                if value is not None: # Ensure we don't overwrite with None
+                if value is not None: 
                     state_updates[key] = value
             # The "output" of this tool is just a confirmation message.
             output = f"Successfully updated state with: {args}"
@@ -200,8 +199,6 @@ def tool_node(state: TravelAgentState):
         )
 
     # After the loop, apply all collected updates to the state
-    # This directly modifies the values in the TravelAgentState dictionary
-    # for the next nodes in the graph to use.
     if state_updates:
         state.update(state_updates)
             
@@ -240,7 +237,7 @@ Do not just list the data; present it in an appealing, conversational way.
     # Return both the AI message and the structured data to the state
     return {
         "messages": [final_reply_message],
-        "final_structured_data": final_data_object.dict() # Convert Pydantic model to dict
+        "final_structured_data": final_data_object.dict() 
     }
 
 
@@ -255,7 +252,7 @@ def build_graph(checkpointer=None):
 
     builder.add_node("router", call_router_node)
     builder.add_node("tool_executor", tool_node)
-    builder.add_node("final_responder", final_response_node) # Final summary node
+    builder.add_node("final_responder", final_response_node)
     
     builder.set_entry_point("router")
 
