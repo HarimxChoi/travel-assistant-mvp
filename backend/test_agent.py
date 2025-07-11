@@ -1,4 +1,4 @@
-# test_agent.py (Final Version for testing the refactored agent_graph.py)
+# test_agent.py (for Hybrid Tool Agent)
 
 import uuid
 import pprint
@@ -6,78 +6,97 @@ import traceback
 
 # This will import the NEW, refactored version of your agent_graph.py
 from agent_graph import build_graph
-from langchain_core.messages import HumanMessage
-from langgraph.checkpoint.memory import InMemorySaver
+from langchain_core.messages import HumanMessage, AIMessage
 
 # --- 1. Build the Agent Graph ---
-# We build the graph with a fresh in-memory checkpointer for each test run.
-print("--- Building the agent graph definition (blueprint) ---")
-agent_graph_builder = build_graph()  # Step 1: Get the blueprint (no arguments passed)
-print("--- Graph definition build complete ---")
-
-# Step 2: Prepare the checkpointer (memory) for this specific test
-memory = InMemorySaver() 
-
-# Step 3: Compile the graph using the blueprint and the checkpointer
-agent_graph = agent_graph_builder.compile(checkpointer=memory)
-print("--- Graph compiled successfully for testing ---")
-
+# The new build_graph function returns a compiled, ready-to-use graph.
+# The checkpointer (memory) is handled internally for simplicity.
+agent_graph = build_graph()
+print("--- Hybrid Agent Graph is ready for testing ---")
 
 # --- 2. Define a Test Runner Function ---
-def run_test_scenario(query: str, thread_id: str):
+def run_test_conversation(turns: list, thread_id: str):
     """
-    Simulates a full conversation turn with the agent for a given query.
+    Simulates a multi-turn conversation with the agent.
+    'turns' should be a list of user query strings.
     """
     print(f"\n\n=======================================================")
-    print(f"--- STARTING TEST SCENARIO ---")
+    print(f"--- STARTING NEW TEST CONVERSATION ---")
     print(f"Thread ID: {thread_id}")
-    print(f"User Query: \"{query}\"")
     print(f"=======================================================")
 
-    graph_input = {"messages": [HumanMessage(content=query)]}
+    # The config is set once for the entire conversation thread
     thread_config = {"configurable": {"thread_id": thread_id}}
     
-    try:
-        # Invoke the graph synchronously. This now uses the langchain-google-genai backed agent.
-        final_state = agent_graph.invoke(graph_input, thread_config)
+    for i, query in enumerate(turns):
+        print(f"\n--- Turn {i+1}: User Query ---")
+        print(f"> \"{query}\"")
         
-        print("\n--- FINAL STATE ---")
-        pprint.pprint(final_state)
-
-        # Safely extract and print the final reply
-        messages = final_state.get('messages', [])
-        if messages:
-            last_message = messages[-1]
-            print("\n--- FINAL AGENT REPLY ---")
-            # Check if the last message has content. If it's a tool call, it might be empty.
-            if last_message.content:
+        # The input is always a list containing a single new HumanMessage
+        graph_input = {"messages": [HumanMessage(content=query)]}
+        
+        try:
+            # Invoke the graph. It will automatically load the history for the given thread_id.
+            final_state = agent_graph.invoke(graph_input, thread_config)
+            
+            # Extract and print the agent's last response
+            last_message = final_state.get('messages', [])[-1]
+            
+            print("\n--- Agent's Response ---")
+            if isinstance(last_message, AIMessage) and last_message.content:
                 print(last_message.content)
             else:
-                print("(Agent ended with a tool call or non-text message)")
-        else:
-            print("\n--- No messages in final state. ---")
-        
-    except Exception as e:
-        print("\n--- AN ERROR OCCURRED DURING GRAPH INVOCATION ---")
-        traceback.print_exc()
+                # This could be a tool call result or other non-text message
+                print("(Agent's turn ended. See full state below for details.)")
+
+            # Optionally, print the full final state for detailed debugging
+            # print("\n--- Full State after Turn ---")
+            # pprint.pprint(final_state)
+            
+        except Exception as e:
+            print("\n--- AN ERROR OCCURRED ---")
+            traceback.print_exc()
+            break # Stop the conversation if an error occurs
 
 # --- 3. Main Test Execution Block ---
 if __name__ == "__main__":
     
-    # --- Test Scenario 1: Information is missing ---
-    # Expected Flow: extractor -> slot_filler -> END
-    missing_info_query = "I want to go to Hawaii."
+    # --- Test Scenario 1: Flight Search (Amadeus Tool) ---
+    # Goal: Test if the agent correctly identifies the need for flight search
+    # and calls the amadeus_flight_search tool.
     thread_1_id = f"test_thread_{uuid.uuid4()}"
-    run_test_scenario(missing_info_query, thread_1_id)
+    test_scenario_1 = [
+        # Note: Amadeus test environment requires future dates.
+        "Hi, I need to book a flight to SFO from NYC for 2 people, from September 10th to September 15th, 2025."
+    ]
+    run_test_conversation(test_scenario_1, thread_1_id)
     
-    # --- Test Scenario 2: All information is provided ---
-    # Expected Flow: extractor -> tool_executor -> final_responder -> END
-    complete_info_query = "I want to book a flight to Tokyo from 2025-12-20 to 2025-12-27."
+    # --- Test Scenario 2: General Info Search (Tavily Tool) ---
+    # Goal: Test if the agent correctly identifies a general question
+    # and calls the general_web_search tool.
     thread_2_id = f"test_thread_{uuid.uuid4()}"
-    run_test_scenario(complete_info_query, thread_2_id)
+    test_scenario_2 = [
+        "What are some popular tourist attractions in Paris?"
+    ]
+    run_test_conversation(test_scenario_2, thread_2_id)
     
-    # --- Test Scenario 3: Follow-up in the same thread (to test memory) ---
-    # We will use the same thread_id from scenario 1 to see if the agent remembers the context.
-    print("\n\n--- CONTINUING CONVERSATION for Thread 1 ---")
-    follow_up_query = "My travel dates are from December 20th to December 27th, 2025."
-    run_test_scenario(follow_up_query, thread_1_id) # Using the SAME thread_1_id
+    # --- Test Scenario 3: Multi-Turn Conversation (Memory Test) ---
+    # Goal: Test if the agent can handle a conversation, ask clarifying questions,
+    # and use memory to call the right tool.
+    thread_3_id = f"test_thread_{uuid.uuid4()}"
+    test_scenario_3 = [
+        "I want to go to London.", # Initial, incomplete query
+        "I'll be traveling next year, from March 5th to March 10th.", # Providing more info
+        "Also, are there any good musical shows happening during that time?" # Follow-up general question
+    ]
+    run_test_conversation(test_scenario_3, thread_3_id)
+    from datetime import date, timedelta
+    
+    # Set dates for 3 months from now to ensure they are in the future
+    departure_date = date.today() + timedelta(days=90)
+    return_date = departure_date + timedelta(days=3)
+
+    query = f"I want to find a flight from New York to San Francisco, departing on {departure_date.strftime('%Y-%m-%d')} for 3 days."
+    
+    thread_4_id = f"test_thread_{uuid.uuid4()}"
+    run_test_conversation([query], thread_4_id)

@@ -1,274 +1,198 @@
-# --- 1. Import necessary libraries ---
 import os
 from dotenv import load_dotenv
 from langgraph.graph import StateGraph, END
 from typing import TypedDict, Annotated, List, Optional
 import operator
-from langchain_core.pydantic_v1 import BaseModel, Field
+from pydantic import BaseModel, Field
 from langchain_core.messages import AnyMessage, HumanMessage, AIMessage, ToolMessage
 from langchain_core.tools import tool
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.checkpoint.memory import InMemorySaver
-from tavily import TavilyClient
 import json
 from datetime import datetime
+from amadeus import Client, ResponseError
+from tavily import TavilyClient
 
-
-# --- Load Environment Variables ---
+# --- 1. Load Environment Variables & Initialize Clients ---
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
 
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-if not GOOGLE_API_KEY: raise ValueError("GOOGLE_API_KEY not found.")
-print("Google API Key loaded successfully.")
-
+AMADEUS_API_KEY = os.getenv("AMADEUS_API_KEY")
+AMADEUS_API_SECRET = os.getenv("AMADEUS_API_SECRET")
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
-tavily_client = TavilyClient(api_key=TAVILY_API_KEY) if TAVILY_API_KEY else None
-if tavily_client: print("Tavily Client initialized successfully.")
+
+if not all([GOOGLE_API_KEY, AMADEUS_API_KEY, AMADEUS_API_SECRET, TAVILY_API_KEY]):
+    raise ValueError("One or more required API keys are missing.")
+
+llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", google_api_key=GOOGLE_API_KEY)
+tavily_client = TavilyClient(api_key=TAVILY_API_KEY)
+amadeus = None
+try:
+    amadeus = Client(client_id=AMADEUS_API_KEY, client_secret=AMADEUS_API_SECRET)
+    print("Amadeus and Tavily Clients initialized successfully.")
+except Exception as e:
+    print(f"Failed to initialize Amadeus Client: {e}")
+
+# --- 2. Define Tools ---
+
+# Amadeus Tool for Flights
+class FlightSearchArgs(BaseModel):
+    originLocationCode: str = Field(description="The IATA code of the departure city.")
+    destinationLocationCode: str = Field(description="The IATA code of the arrival city.")
+    departureDate: str = Field(description="The departure date in YYYY-MM-DD format.")
+    returnDate: Optional[str] = Field(description="The return date for round-trip flights.")
+    adults: int = Field(description="The number of adult passengers.", default=1)
+
+@tool(args_schema=FlightSearchArgs)
+def search_flights(originLocationCode: str, destinationLocationCode: str, departureDate: str, returnDate: Optional[str] = None, adults: int = 1) -> str:
+    """Use this tool to search for specific flight offers. This is for flights ONLY."""
+    if not amadeus: return "Amadeus API client is not available."
+    print(f"--- TOOL: Searching flights with Amadeus: {originLocationCode} -> {destinationLocationCode} ---")
+    
+    try:
+        params = {
+            'originLocationCode': originLocationCode,
+            'destinationLocationCode': destinationLocationCode,
+            'departureDate': departureDate,
+            'adults': adults,
+            'nonStop': 'false',
+            'max': 3, 
+            'currencyCode': 'USD'
+        }
+        if returnDate:
+            params['returnDate'] = returnDate
+
+        response = amadeus.shopping.flight_offers_search.get(**params)
+        
+        if not response.data:
+            return "No flight offers found for the given criteria. Please inform the user."
+
+        simplified_offers = []
+        carriers = response.result.get('dictionaries', {}).get('carriers', {})
+
+        for offer in response.data:
+            itineraries_details = []
+            for itinerary in offer['itineraries']:
+                segments_details = []
+                for segment in itinerary['segments']:
+                    segments_details.append({
+                        "departure_airport": segment['departure']['iataCode'],
+                        "departure_time": segment['departure']['at'],
+                        "arrival_airport": segment['arrival']['iataCode'],
+                        "arrival_time": segment['arrival']['at'],
+                        "flight_number": f"{segment['carrierCode']} {segment['number']}",
+                        "duration": segment['duration']
+                    })
+                itineraries_details.append({"segments": segments_details})
+
+            airline_code = offer['itineraries'][0]['segments'][0]['carrierCode']
+            airline_name = carriers.get(airline_code, airline_code)
+            
+            simplified_offers.append({
+                "airline": airline_name,
+                "total_price": f"{offer['price']['total']} USD",
+                "itineraries": itineraries_details
+            })
+        
+        return json.dumps(simplified_offers)
+    except ResponseError as error:
+        return f"Amadeus API Error: {error.description}"
+    except Exception as e:
+        return f"An unexpected error occurred: {e}"
 
 
+# Tavily Tool for General Info
+class WebSearchArgs(BaseModel):
+    query: str = Field(description="A specific, detailed search query for the web.")
 
+@tool(args_schema=WebSearchArgs)
+def general_web_search(query: str) -> str:
+    """Use this tool to search the internet for general travel information, such as local events, weather, restaurant recommendations, or other questions that are NOT about specific flight prices."""
+    print(f"--- TOOL: Searching web with Tavily for: {query} ---")
+    try:
+        response = tavily_client.search(query=query, search_depth="basic", max_results=3)
+        return json.dumps(response['results'])
+    except Exception as e:
+        return f"An error occurred during web search: {e}"
+    
+tools = [search_flights, general_web_search]
+tool_llm = llm.bind_tools(tools)
 
-
-# --- 3. Define Tools ---
-class FlightPriceArgs(BaseModel):
-    destination: str = Field(description="The destination city for the flight search.")
-
-@tool(args_schema=FlightPriceArgs)
-def flight_price_search(destination: str) -> str:
-    """Use this to get typical flight prices for a destination."""
-    if not tavily_client: return "Search tool is not available."
-    print(f"--- TOOL: Searching flight prices for {destination} with Tavily ---")
-    query = f"typical round-trip flight prices to {destination}"
-    response = tavily_client.search(query=query, search_depth="basic", max_results=3)
-    return json.dumps(response['results'])
-
-class LocalEventArgs(BaseModel):
-    destination: str = Field(description="The destination city.")
-    start_date: str = Field(description="The start date for the event search, in YYYY-MM-DD format.")
-
-@tool(args_schema=LocalEventArgs)
-def local_event_search(destination: str, start_date: str) -> str:
-    """Use this to find local events and festivals at a destination around a specific date."""
-    if not tavily_client: return "Search tool is not available."
-    print(f"--- TOOL: Searching local events for {destination} around {start_date} with Tavily ---")
-    query = f"events, festivals, and activities in {destination} around {start_date}"
-    response = tavily_client.search(query=query, search_depth="advanced", max_results=3)
-    return json.dumps(response['results'])
-
-class UpdateTripInfoArgs(BaseModel):
-    destination: Optional[str] = Field(description="The destination city.")
-    start_date: Optional[str] = Field(description="The departure date in YYYY-MM-DD format.")
-    end_date: Optional[str] = Field(description="The return date in YYYY-MM-DD format.")
-
-@tool(args_schema=UpdateTripInfoArgs)
-def get_trip_information(destination: str, start_date: str, end_date: str) -> str:
-    """
-    Use this FINAL tool to search for both flight prices and local events
-    ONLY AFTER you have confirmed all three required pieces of information
-    (destination, start_date, end_date) are stored in the state.
-    """
-    if not tavily_client: return "Search tool is not available."
-    price_query = f"typical round-trip flight prices to {destination} from {start_date}"
-    event_query = f"events and festivals in {destination} between {start_date} and {end_date}"
-    price_results = tavily_client.search(query=price_query, max_results=2)
-    event_results = tavily_client.search(query=event_query, max_results=3)
-    combined = {"flight_info": price_results['results'], "local_events": event_results['results']}
-    return json.dumps(combined)
-
-# The final, definitive list of tools.
-tools = [flight_price_search, local_event_search, get_trip_information]
-
-
-# --- 4. Define LLM and State ---
-
-class FinalHandoff(BaseModel):
-    """The final structured data object for handoff to internal systems."""
-    user_query: str = Field(description="The user's original, unmodified query.")
-    inferred_destination: str = Field(description="The destination inferred from the conversation.")
-    inferred_start_date: str = Field(description="The start date inferred and structured as YYYY-MM-DD.")
-    inferred_end_date: str = Field(description="The end date inferred and structured as YYYY-MM-DD.")
-    flight_price_info: List[dict] = Field(description="A list of dictionaries containing flight price information from the search tool.")
-    local_event_info: List[dict] = Field(description="A list of dictionaries containing local event information from the search tool.")
-
+# --- 3. Define State and Graph ---
 class TravelAgentState(TypedDict):
     messages: Annotated[List[AnyMessage], operator.add]
+
+def should_call_tool(state: TravelAgentState):
+    last_message = state['messages'][-1]
+    if hasattr(last_message, 'tool_calls') and last_message.tool_calls:
+        return "tool_executor"
+    return END
+
+def call_model_node(state: TravelAgentState):
+    print("--- ROUTER ---")
+    prompt = f"""You are 'Astra', a world-class AI travel assistant. Your personality is friendly, professional, and helpful. You use emojis to make information clear and engaging, but you don't over-saturate your messages.
+
+**System Preamble:**
+*   **Today's Date:** `{datetime.now().strftime('%Y-%m-%d')}`. Use this as a reference for all relative date calculations (e.g., "next Monday", "in 3 days").
+*   **Primary Goal:** Your main job is to help users find flights. Secondary tasks include finding related travel information like local events.
+*   **Formatting Rule:** Use emojis and ***newlines*** (`\n`) to structure your responses for clarity.
+
+**Your 2-Step Response Protocol for Flights:**
+1.  **Step 1 (Flight Info):** When a user asks for flights, your first response should ONLY contain the flight details. Use the `search_flights` tool. After presenting the flight options, ALWAYS end your message by promising to look for more information. (e.g., "I'm now checking for some interesting local events during your stay. I'll be right back!")
+2.  **Step 2 (Enrichment Info):** The system will then automatically trigger a search for local events using the `general_web_search` tool. Your second response should present this information.
+
+**Tool Guide:**
+*   `search_flights`: Use for specific flight price and schedule inquiries. Requires origin, destination, and dates.
+*   `general_web_search`: Use for all other informational queries (events, weather, activities).
+
+**Example of a perfect Step 1 response:**
+
+    I've found some flight options for you! 📄
     
-    # --- These fields are CRUCIAL for the new tool_node to work ---
-    destination: Optional[str]
-    start_date: Optional[str]
-    end_date: Optional[str]
-
-    # This will hold the final structured output
-    final_structured_data: Optional[FinalHandoff]
-
-
-model_id = "gemini-2.5-flash"
-llm = ChatGoogleGenerativeAI(model=model_id, google_api_key=GOOGLE_API_KEY)
-# Bind the tools for the router
-tool_llm = llm.bind_tools(tools)
-# --- NEW: Create an LLM instance specifically for generating the final structured output ---
-structured_llm = llm.with_structured_output(FinalHandoff)
-
-# --- 4. Define Nodes (Using the standard .invoke() method) ---
-
-# agent_graph.py
-
-def call_router_node(state: TravelAgentState):
-    """
-    This is the MASTER router. It analyzes the conversation and decides the next action.
-    It internally parses dates and decides whether to call tools or ask the user a question.
-    """
-    print("--- EXECUTING MASTER ROUTER NODE ---")
-    today = datetime.now().strftime("%Y-%m-%d")
-
-    # This is the new, all-in-one prompt that gives the LLM full reasoning capability.
-    prompt = f"""
-You are a master travel assistant. Your goal is to fill in the user's trip details (`destination`, `start_date`, `end_date`) by having a natural conversation.
-there's no markdown available in this chatting. so just use emoji if you want.
-**Today's Date is: {today}**
-
-**Current Trip Information Stored in Memory:**
-- Destination: {state.get('destination') or 'UNKNOWN'}
-- Start Date: {state.get('start_date') or 'UNKNOWN'}
-- End Date: {state.get('end_date') or 'UNKNOWN'}
-
-**Available Tools:**
-- `flight_price_search(destination)`
-- `local_event_search(destination, start_date)`
-
-**Your Logic Flow:**
-1.  **Analyze the latest user message** in the context of the conversation history.
-2.  **Extract new information** from the user's message.
-3.  **If you found new information:** Your primary action is to call the `update_trip_information` tool to save it to memory. You can update multiple fields at once.
-4.  **After updating, check if all three pieces of information are now known.** If they are, you should THEN call the `get_trip_information` tool as your final action.
-5.  **If information is still missing:** Your only action is to ask the user a friendly, clarifying question.
+    Here is your flight summary:
+    ✈️ Itinerary: NYC to SFO
+    
+    Option 1: JetBlue
+    💸 Price: $296.98 USD
+    🛫 Departs: 2025-10-09 14:00 from JFK
+    🛬 Arrives: 2025-10-09 17:30 at SFO
+    
+    I'm now checking for some interesting local events during your stay. I'll be right back! ✨
 
 **Conversation History:**
 {state['messages']}
 
-Based on this, decide on the single best next action.
+Analyze the user's latest message, considering today's date, and determine the next logical action based on your protocol.
 """
-    
     response = tool_llm.invoke(prompt)
     return {"messages": [response]}
-
+    
 
 def tool_node(state: TravelAgentState):
-    """
-    This node executes tools AND updates the agent's internal state.
-    It's the bridge between the LLM's decisions and the agent's memory.
-    """
-    print("--- EXECUTING TOOL NODE (with State Update) ---")
+    print("--- EXECUTING TOOL ---")
     last_message = state['messages'][-1]
-    
-    # This check is crucial, as the router might decide no tool is needed.
-    if not hasattr(last_message, 'tool_calls') or not last_message.tool_calls:
-        # If no tools are called, we can optionally add a message to indicate this.
-        return {}
-        
     tool_messages = []
-    # Create a dictionary to hold the state updates for this turn.
-    state_updates = {}
-
     for tool_call in last_message.tool_calls:
-        tool_name = tool_call['name']
-        args = tool_call['args']
-        print(f"  > Executing tool: {tool_name} with args: {args}")
-        
-        # --- NEW: Special handling for the state update tool ---
-        if tool_name == 'update_trip_information':
-            # This tool is special. It doesn't call an external API.
-            # Its only purpose is to update our state.
-            print(f"    - Updating internal state with: {args}")
-            for key, value in args.items():
-                if value is not None: 
-                    state_updates[key] = value
-            # The "output" of this tool is just a confirmation message.
-            output = f"Successfully updated state with: {args}"
-        else:
-            # For all other tools (like search), execute them normally.
-            tool_to_call = {t.name: t for t in tools}[tool_name]
-            try:
-                output = tool_to_call.invoke(args)
-            except Exception as e:
-                print(f"    ! Tool execution failed: {e}")
-                output = f"Error executing tool {tool_name}: {e}"
-        
-        tool_messages.append(
-            ToolMessage(content=str(output), name=tool_name, tool_call_id=tool_call['id'])
-        )
-
-    # After the loop, apply all collected updates to the state
-    if state_updates:
-        state.update(state_updates)
-            
+        tool_to_call = {t.name: t for t in tools}[tool_call['name']]
+        try:
+            output = tool_to_call.invoke(tool_call['args'])
+        except Exception as e:
+            output = f"Error executing tool {tool_call['name']}: {e}"
+        tool_messages.append(ToolMessage(content=str(output), name=tool_call['name'], tool_call_id=tool_call['id']))
     return {"messages": tool_messages}
 
-def final_response_node(state: TravelAgentState):
-    """
-    Node: Final Judge.
-    This node synthesizes all information into two final outputs:
-    1. A friendly natural language message for the user.
-    2. A structured JSON object (FinalHandoff) for internal systems.
-    """
-    print("--- EXECUTING FINAL JUDGE NODE ---")
-    
-    # --- Part 1: Generate the structured JSON data ---
-    structured_prompt = f"""
-Based on the entire conversation history, extract all the necessary information and populate the `FinalHandoff` JSON object.
-
-Conversation History:
-{state['messages']}
-"""
-    # Call the LLM that is specifically bound to the FinalHandoff schema
-    final_data_object = structured_llm.invoke(structured_prompt)
-
-    # --- Part 2: Generate the natural language reply ---
-    summary_prompt = f"""
-You are a friendly travel assistant. Based on the following structured data, create a final, helpful summary for the user.
-Do not just list the data; present it in an appealing, conversational way.
-
-**Data to Summarize:**
-{final_data_object.json(indent=2)}
-"""
-    # Use the standard LLM for text generation
-    final_reply_message = llm.invoke(summary_prompt)
-
-    # Return both the AI message and the structured data to the state
-    return {
-        "messages": [final_reply_message],
-        "final_structured_data": final_data_object.dict() 
-    }
-
-
-
-# --- 6. Define the Graph and its Flow ---
 def build_graph(checkpointer=None):
-    """Assembles the final, robust agent graph."""
     if checkpointer is None:
         checkpointer = InMemorySaver()
-
+    
     builder = StateGraph(TravelAgentState)
-
-    builder.add_node("router", call_router_node)
+    builder.add_node("model", call_model_node) 
     builder.add_node("tool_executor", tool_node)
-    builder.add_node("final_responder", final_response_node)
     
-    builder.set_entry_point("router")
-
-    def decide_next_action(state: TravelAgentState):
-        """This router checks if the LLM decided to call a tool or talk to the user."""
-        last_message = state['messages'][-1]
-        if hasattr(last_message, 'tool_calls') and last_message.tool_calls:
-            return "tool_executor"
-        else:
-            # If the router asks a question, the turn ends.
-            return END
-
-    builder.add_conditional_edges("router", decide_next_action)
+    builder.set_entry_point("model")
     
-    # After executing tools, we generate a final summary for the user.
-    builder.add_edge("tool_executor", "final_responder")
-    builder.add_edge("final_responder", END)
+    builder.add_conditional_edges("model", should_call_tool)
+    
+    builder.add_edge("tool_executor", "model")
     
     return builder.compile(checkpointer=checkpointer)

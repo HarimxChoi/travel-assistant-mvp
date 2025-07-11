@@ -48,10 +48,9 @@ body {
 /* --- Individual Message Bubbles --- */
 .message {
   max-width: 80%;
-  padding: 10px 15px;
-  margin-bottom: 10px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
   border-radius: 18px;
-  line-height: 1.5;
   font-size: 0.95rem;
   word-wrap: break-word;
 }
@@ -103,4 +102,29 @@ body {
 
 .input-container button:hover {
   background-color: #357abd;
+}
+
+.message.bot p {
+  margin: 0;
+}
+
+.message.bot ul, .message.bot ol {
+  padding-left: 20px;
+  margin: 5px 0;
+}
+
+.message.bot li {
+  margin-bottom: 4px;
+}
+
+.loading-message {
+  font-style: italic;
+  color: #666;
+  animation: pulse 1.5s infinite ease-in-out;
+}
+
+@keyframes pulse {
+  0% { opacity: 0.7; }
+  50% { opacity: 1; }
+  100% { opacity: 0.7; }
 }
