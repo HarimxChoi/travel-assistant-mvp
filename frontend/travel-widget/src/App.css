@@ -13,8 +13,8 @@ body {
 
 /* --- Chat Widget Container --- */
 .chat-widget {
-  width: 380px;
-  height: 600px;
+  width: 400px;
+  height: 650px;
   display: flex;
   flex-direction: column;
   background-color: #ffffff;
@@ -35,25 +35,54 @@ body {
   border-bottom: 1px solid transparent;
 }
 
-
 /* --- Messages Container --- */
 .messages-container {
   flex-grow: 1;
-  padding: 20px;
+  padding: 20px 15px; /* 좌우 패딩을 조금 줄임 */
   overflow-y: auto;
   display: flex;
   flex-direction: column;
+  gap: 4px; /* 메시지 간 간격을 줄임 */
 }
 
-/* --- Individual Message Bubbles --- */
+/* --- [CHANGE] Individual Message Bubbles --- */
 .message {
-  max-width: 80%;
-  padding: 8px 12px;
-  margin-bottom: 8px;
+  max-width: 85%;
+  padding: 8px 14px; /* 패딩을 더 컴팩트하게 조정 */
+  margin-bottom: 4px;
   border-radius: 18px;
   font-size: 0.95rem;
   word-wrap: break-word;
+  /* line-height: 1.5; <- 이 속성을 제거하여 불필요한 줄간격을 없앱니다. */
 }
+
+/* --- [NEW] Content-Specific Spacing --- */
+/* message 내부의 p 태그에만 마진을 적용하여 텍스트 간격을 관리합니다. */
+.message p {
+  margin-top: 4px;
+  margin-bottom: 4px;
+}
+/* 첫 번째 p 태그와 마지막 p 태그는 추가 마진을 없애 버블 경계에 붙도록 합니다. */
+.message p:first-child {
+  margin-top: 0;
+}
+.message p:last-child {
+  margin-bottom: 0;
+}
+
+.message ul {
+  padding-left: 20px;
+  margin-top: 8px;
+  margin-bottom: 8px;
+}
+.message li {
+  margin-bottom: 4px;
+}
+/* 마지막 li는 하단 마진을 없애 깔끔하게 마무리합니다. */
+.message li:last-child {
+    margin-bottom: 0;
+}
+
 
 .user {
   align-self: flex-end;
@@ -69,6 +98,33 @@ body {
   border-bottom-left-radius: 4px;
 }
 
+/* --- Suggested Replies Styling --- */
+.suggested-replies {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 15px; /* 상단 패딩 추가, 하단 패딩 유지 */
+  border-top: 1px solid #e9ecef;
+  background-color: #fff;
+}
+
+.suggestion-btn {
+  background-color: #f0f2f5;
+  color: #357abd;
+  border: 1px solid #d1dce6;
+  padding: 8px 12px;
+  border-radius: 16px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.suggestion-btn:hover {
+  background-color: #e2e8f0;
+  border-color: #b6c5d6;
+}
+
 /* --- Input Area --- */
 .input-container {
   display: flex;
@@ -79,14 +135,18 @@ body {
 
 .input-container input {
   flex-grow: 1;
-  border: none;
-  padding: 10px;
+  border: 1px solid #d1dce6;
+  padding: 10px 12px;
   font-size: 0.95rem;
-  background-color: transparent;
+  background-color: #fff;
+  border-radius: 8px;
+  margin-right: 10px;
 }
 
 .input-container input:focus {
   outline: none;
+  border-color: #4a90e2;
+  box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.2);
 }
 
 .input-container button {
@@ -104,17 +164,9 @@ body {
   background-color: #357abd;
 }
 
-.message.bot p {
-  margin: 0;
-}
-
-.message.bot ul, .message.bot ol {
-  padding-left: 20px;
-  margin: 5px 0;
-}
-
-.message.bot li {
-  margin-bottom: 4px;
+.input-container button:disabled {
+  background-color: #a0c3e8;
+  cursor: not-allowed;
 }
 
 .loading-message {
@@ -127,4 +179,56 @@ body {
   0% { opacity: 0.7; }
   50% { opacity: 1; }
   100% { opacity: 0.7; }
+}
+
+.contact-form {
+  padding: 15px;
+  margin: 0 15px 10px 15px;
+  border: 1px solid #4a90e2;
+  border-radius: 12px;
+  background-color: #f4f8fe;
+  animation: fadeIn 0.5s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.contact-form h4 {
+  margin-top: 0;
+  margin-bottom: 5px;
+  color: #333;
+}
+
+.contact-form p {
+  font-size: 0.9rem;
+  color: #555;
+  margin-top: 0;
+  margin-bottom: 15px;
+}
+
+.contact-form input {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  margin-bottom: 10px;
+  box-sizing: border-box; /* 패딩이 너비에 포함되도록 설정 */
+}
+
+.contact-form button {
+  width: 100%;
+  padding: 10px;
+  border: none;
+  border-radius: 6px;
+  background-color: #50e3c2;
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.contact-form button:hover {
+  background-color: #43c0a7;
 }

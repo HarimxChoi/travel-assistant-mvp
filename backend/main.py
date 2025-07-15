@@ -4,7 +4,8 @@ from pydantic import BaseModel, Field
 import uvicorn
 from langchain_core.messages import HumanMessage
 import uuid
-from agent_graph import build_graph
+from .agent_graph import build_graph
+import asyncio
 
 # --- App & State Initialization ---
 app = FastAPI(title="Ascend Travel AI Assistant API (Async)")
@@ -31,11 +32,12 @@ class StatusResponse(BaseModel):
     result: dict | None = None
 
 # --- Background Task Function ---
-def run_agent_in_background(task_id: str, thread_id: str, message: str):
+async def run_agent_in_background(task_id: str, thread_id: str, message: str):
     print(f"--- BG Task {task_id} Started ---")
     try:
         config = {"configurable": {"thread_id": thread_id}}
-        final_state = agent_graph.invoke({"messages": [HumanMessage(content=message)]}, config)
+        # Use the asynchronous invoke method
+        final_state = await agent_graph.ainvoke({"messages": [HumanMessage(content=message)]}, config)
         
         last_message = final_state['messages'][-1]
         reply = str(last_message.content) if last_message.content else "I've processed the information."
